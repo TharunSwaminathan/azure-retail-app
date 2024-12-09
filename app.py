@@ -14,6 +14,8 @@ import csv
 import os
 import pyodbc
 
+from azure.storage.blob import BlobServiceClient, BlobClient, ContainerClient
+
 # Database connection details
 server_name = 'myretailserver.database.windows.net'
 username_db = 'retailserver1'
@@ -238,20 +240,62 @@ def insert_data(data, table):
         return "false"
 
 # Route for uploading data
-@app.route('/upload', methods=['GET','POST'])
+# Set up your Azure Storage connection string
+AZURE_STORAGE_CONNECTION_STRING = ${{ secrets.AZURE_STORAGE_CONNECTION_STRING }}
+
+# Initialize the BlobServiceClient
+blob_service_client = BlobServiceClient.from_connection_string(AZURE_STORAGE_CONNECTION_STRING)
+
+# Container names
+CONTAINER_NAMES = {
+    "0": "transactions",  # Transaction data container
+    "1": "households",    # Households data container
+    "2": "products"       # Products data container
+}
+
+@app.route('/upload', methods=['GET', 'POST'])
 def upload():
-    if not session or not session['username'] or not session['firstname'] or not session['lastname'] or not session['email']: return redirect(url_for('home'))
+    if not session or not session['username'] or not session['firstname'] or not session['lastname'] or not session['email']: 
+        return redirect(url_for('home'))
+    
     if request.method == "POST":
         file = request.files['file_upload']
-        table = request.form['data_type']
+        table = request.form['data_type']  # The selected data type (transactions, households, or products)
+        
         if file:
-            data = file.read().decode('utf-8')
-            parsed_data = csv.reader(data.splitlines(), delimiter=',')
-            next(parsed_data, None)
-            successful = insert_data(list(parsed_data), table)
-            return render_template('upload.html', success=successful)
+            # Get the container name based on the selected data type
+            container_name = CONTAINER_NAMES.get(table)  # Get the correct container based on the form data
+            
+            if not container_name:
+                return render_template('upload.html', success="false", error_message="Invalid data type selected.")
+
+            # Get the BlobClient for the selected container
+            container_client = blob_service_client.get_container_client(container_name)
+            file_name = file.filename
+
+            # Create a blob client for the file to be uploaded
+            blob_client = container_client.get_blob_client(file_name)
+            
+            try:
+                # Upload the file to the selected Azure Blob Storage container
+                blob_client.upload_blob(file, overwrite=True)
+                
+                # Read the file and process the CSV data
+                data = file.read().decode('utf-8')
+                parsed_data = csv.reader(data.splitlines(), delimiter=',')
+                next(parsed_data, None)  # Skip header row if necessary
+                
+                successful = insert_data(list(parsed_data), table)  # Insert the data into the database (households, transactions, or products)
+                
+                return render_template('upload.html', success="true")
+            except Exception as e:
+                print(f"Error uploading file to Azure: {e}")
+                return render_template('upload.html', success="false", error_message=str(e))
+        
         return render_template('upload.html', success="true")
+    
     return render_template('upload.html', success="none")
+
 
 # This block of code initializes and runs the Flask application.
 # Initially, it attempts to bind the application to port 5000.

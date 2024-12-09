@@ -1,7 +1,3 @@
-# Docs for the Azure Web Apps Deploy action: https://github.com/Azure/webapps-deploy
-# More GitHub Actions for Azure: https://github.com/Azure/actions
-# More info on Python, GitHub Actions, and Azure App Service: https://aka.ms/python-webapps-actions
-
 name: Build and deploy Python app to Azure Web App - MyRetailApp
 
 on:
@@ -15,33 +11,38 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # Step 1: Checkout the repository
       - uses: actions/checkout@v4
 
+      # Step 2: Set up Python
       - name: Set up Python version
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
-      - name: Create and start virtual environment
+      # Step 3: Install dependencies
+      - name: Install dependencies
         run: |
           python -m venv venv
           source venv/bin/activate
-      
-      - name: Install dependencies
-        run: pip install -r requirements.txt
-        
-      # Optional: Add step to run tests here (PyTest, Django test suites, etc.)
+          pip install -r requirements.txt
 
-      - name: Zip artifact for deployment
-        run: zip release.zip ./* -r
+      # Step 4: Run Tests (Optional)
+      # Uncomment and add test commands here if you have any test suite
+      # - name: Run tests
+      #   run: pytest
 
-      - name: Upload artifact for deployment jobs
+      # Step 5: Zip the application for deployment
+      - name: Zip application for deployment
+        run: |
+          zip -r release.zip . -x "venv/*" "*.git*" "*.github/*" "__pycache__/*"
+
+      # Step 6: Upload artifact for deployment
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: python-app
-          path: |
-            release.zip
-            !venv/
+          path: release.zip
 
   deploy:
     runs-on: ubuntu-latest
@@ -50,29 +51,31 @@ jobs:
       name: 'Production'
       url: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
     permissions:
-      id-token: write #This is required for requesting the JWT
+      id-token: write # Required for requesting JWT
 
     steps:
-      - name: Download artifact from build job
+      # Step 1: Download artifact from the build job
+      - name: Download artifact from build
         uses: actions/download-artifact@v4
         with:
           name: python-app
 
-      - name: Unzip artifact for deployment
+      # Step 2: Unzip artifact for deployment
+      - name: Unzip artifact
         run: unzip release.zip
 
-      
-      - name: Login to Azure
+      # Step 3: Login to Azure
+      - name: Azure Login
         uses: azure/login@v2
         with:
-          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_AA2044F7C5A94199B32016D87EC39D42 }}
-          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_F202E911460843FD971BAF6398E090AC }}
-          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_5E1CAE04667A486CBF785D2FD01FE578 }}
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: 'Deploy to Azure Web App'
+      # Step 4: Deploy to Azure Web App
+      - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
         id: deploy-to-webapp
         with:
           app-name: 'MyRetailApp'
           slot-name: 'Production'
-          
